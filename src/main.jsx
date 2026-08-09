@@ -38,16 +38,35 @@ function createDom(fiber) {
   return dom
 }
 
+// Fiber tree를 돌면서 생성만 해놓은 Dom 객체를 Document에 한꺼번에 연결
+// 이 사이에 브라우저 페인트가 끼어들 수 없음
+function commitRoot() {
+  commitWork(wipRoot.child)
+  wipRoot = null
+}
+
+function commitWork(fiber) {
+  if (!fiber) {
+    return
+  }
+  const domParent = fiber.parent.dom
+  domParent.appendChild(fiber.dom)
+  commitWork(fiber.child)
+  commitWork(fiber.sibling)
+}
+
 function render(element, container) {
-  nextUnitOfWork = {
+  wipRoot = {
     dom: container,
     props: {
       children: [element],
     }
   }
+  nextUnitOfWork = wipRoot
 }
 
 let nextUnitOfWork = null
+let wipRoot = null
 
 function workLoop(deadline) {
   let shouldYield = false
@@ -57,6 +76,12 @@ function workLoop(deadline) {
     )
     shouldYield = deadline.timeRemaining() < 1
   }
+
+  // 더 이상 처리할 게 없는 상태인 경우
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot()
+  }
+
   requestIdleCallback(workLoop)
 }
 
@@ -70,35 +95,35 @@ function performUnitOfWork(fiber) {
   if (!fiber.dom) {
     fiber.dom = createDom(fiber)
   }
-​
-  if (fiber.parent) {
-    fiber.parent.dom.appendChild(fiber.dom)
-  }
-​
+
+  // if (fiber.parent) {
+  //   fiber.parent.dom.appendChild(fiber.dom)
+  // }
+
   const elements = fiber.props.children
   let index = 0
   let prevSibling = null
-​
+
   while (index < elements.length) {
     const element = elements[index]
-​
+
     const newFiber = {
       type: element.type,
       props: element.props,
       parent: fiber,
       dom: null,
     }
-​
+
     if (index === 0) {
       fiber.child = newFiber
     } else {
       prevSibling.sibling = newFiber
     }
-​
+
     prevSibling = newFiber
     index++
   }
-​
+
   if (fiber.child) {    // 규칙 1: 자식이 있으면 자식으로
     return fiber.child
   }
