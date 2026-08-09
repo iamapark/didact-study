@@ -197,9 +197,49 @@ function performUnitOfWork(fiber) {
   // root까지 올라와도 형제가 없으면 while 종료 → undefined 반환
 }
 
+let wipFiber
+let hookIndex = null
+
 function updateFunctionComponent(fiber) {
+  wipFiber = fiber
+  hookIndex = 0
+  wipFiber.hooks = []
   const children = [fiber.type(fiber.props)]
   reconcileChildren(fiber, children)
+}
+
+function useState(initial) {
+  const oldHook=
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex]
+  const hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: []
+  }
+
+  const actions = oldHook ? oldHook.queue : []
+  actions.forEach(action => {
+    console.info(`before action - hook.state: ${hook.state}`)
+    hook.state = action(hook.state)
+    console.info(`after action - hook.state: ${hook.state}`)
+  })
+
+  const setState = action => {
+    console.info(`setState!!`)
+    hook.queue.push(action)
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot,
+    }
+    nextUnitOfWork = wipRoot
+    deletions = []
+  }
+
+  wipFiber.hooks.push(hook)
+  hookIndex++
+  return [hook.state, setState]
 }
 
 function updateHostComponent(fiber) {
@@ -274,11 +314,18 @@ function reconcileChildren(wipFiber, elements) {
 const Didact = {
   createElement,
   render,
+  useState,
 }
 
-function App(props) {
-  return <h1>Hi {props.name}</h1>
+function Counter() {
+  const [state, setState] = Didact.useState(1)
+  return (
+    <h1 onClick={() => setState(c => c + 1)}>
+      Count: {state}
+    </h1>
+  )
 }
-const element = <App name="foo" />
+
+const element = <Counter />
 const container = document.getElementById("root")
 Didact.render(element, container)
