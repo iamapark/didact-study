@@ -22,24 +22,29 @@ function createTextElement(text) {
   }
 }
 
-function render(element, container) {
+function createDom(fiber) {
   const dom = 
-    element.type === 'TEXT_ELEMENT'
+    fiber.type === 'TEXT_ELEMENT'
       ? document.createTextNode("")
-      : document.createElement(element.type)
+      : document.createElement(fiber.type)
 
-  const isProperty = key => key !== 'children'
-  Object.keys(element.props)
+  const isProperty = key => key !== "children"
+  Object.keys(fiber.props)
     .filter(isProperty)
     .forEach(name => {
-      dom[name] = element.props[name]
+      dom[name] = fiber.props[name]
     })
+​
+  return dom
+}
 
-  element.props.children.forEach(child => {
-    render(child, dom)
-  })
-
-  container.appendChild(dom)
+function render(element, container) {
+  nextUnitOfWork = {
+    dom: container,
+    props: {
+      children: [element],
+    }
+  }
 }
 
 let nextUnitOfWork = null
@@ -57,8 +62,54 @@ function workLoop(deadline) {
 
 requestIdleCallback(workLoop)
 
-function performUnitOfWork(nextUnitOfWork) {
-  
+/**
+ * 각 fiber에는 첫번째 child, 다음 sibling, 그리고 parent로 가는 링크가 있음
+ */
+
+function performUnitOfWork(fiber) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+​
+  if (fiber.parent) {
+    fiber.parent.dom.appendChild(fiber.dom)
+  }
+​
+  const elements = fiber.props.children
+  let index = 0
+  let prevSibling = null
+​
+  while (index < elements.length) {
+    const element = elements[index]
+​
+    const newFiber = {
+      type: element.type,
+      props: element.props,
+      parent: fiber,
+      dom: null,
+    }
+​
+    if (index === 0) {
+      fiber.child = newFiber
+    } else {
+      prevSibling.sibling = newFiber
+    }
+​
+    prevSibling = newFiber
+    index++
+  }
+​
+  if (fiber.child) {    // 규칙 1: 자식이 있으면 자식으로
+    return fiber.child
+  }
+  let nextFiber = fiber
+  while (nextFiber) {
+    if (nextFiber.sibling) {    // 규칙 2: 형제가 있으면 형제로
+      return nextFiber.sibling
+    }
+    nextFiber = nextFiber.parent  // 규칙 3: 없으면 한 칸 올라가서 다시 형제 찾기
+  }
+  // root까지 올라와도 형제가 없으면 while 종료 → undefined 반환
 }
 
 const Didact = {
@@ -67,9 +118,12 @@ const Didact = {
 }
 
 const element = (
-  <div id="foo">
-    <a>bar</a>
-    <b />
+  <div>
+    <h1>
+      <p />
+      <a />
+    </h1>
+    <h2 />
   </div>
 )
 const container = document.getElementById("root")
